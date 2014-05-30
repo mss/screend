@@ -165,7 +165,7 @@ getscreen() {
 
 mktempconf() {
   local name=${1:-screend}
-  mktemp --tmpdir "$name.XXXXXXXXXX.conf"
+  mktemp --tmpdir "${name}rc.XXXXXXXXXX"
 }
 
 
