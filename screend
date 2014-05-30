@@ -79,7 +79,6 @@ main() {
       return 1
     ;;
   esac
-  return $?
 }
 
 
@@ -110,22 +109,18 @@ dostart() {
     sleep 1
   fi
   mv "$pidfile.tmp" "$pidfile"
-
-  return 0
 }
 
 dostop() {
   [[ -n "$pid" ]] || return 0
 
   kill $pid
-  return $?
 }
 
 dostatus() {
   [[ -n "$pid" ]]
 
   kill -0 $pid
-  return $?
 }
 
 doexec() {
