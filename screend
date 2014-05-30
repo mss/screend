@@ -9,8 +9,9 @@ logfile=
 
 main() {
   local instance=
+  local instances=
 
-  while getopts n:i:p:l: OPTNAME; do
+  while getopts n:i:I:p:l: OPTNAME; do
     case "$OPTNAME" in
       h)
         usage
@@ -21,6 +22,9 @@ main() {
       ;;
       i)
         instance=$OPTARG
+      ;;
+      I)
+        instances=$OPTARG
       ;;
       p)
         pidfile=$OPTARG
@@ -34,6 +38,10 @@ main() {
 
   local command=$1
   shift
+
+  if [[ "$1" == "--" ]]; then
+    shift
+  fi
 
   if [[ -z "$name" ]]; then
     name=screend
@@ -58,22 +66,34 @@ main() {
   pid=$(getscreen "$name")
 
   case "$command" in
-    start|stop|status|exec)
-      "do$command" "$@"
-      return $?
+    start|exec)
+      doit $command "$@"
+    ;;
+    stop|status)
+      doit $command
+    ;;
+    monit)
+      doit $command "${instances}" "$@"
     ;;
     *)
       return 1
     ;;
   esac
+  return $?
 }
 
+
+doit() {
+  command=$1
+  shift
+  "do$command" "$@"
+}
 
 dostart() {
   [[ -z "$pid" ]]
   rm -f "$pidfile"
 
-  local conffile=$(mktemp --tmpdir 'screenrc.XXXXXX.tmp')
+  local conffile=$(mktempconf screen)
   echo logfile $logfile > "$conffile"
   screen -d -m -s "$SHELL" -c "$conffile" -L -S "$name" "$0" -p "$pidfile" exec -- "$@"
   rm "$conffile"
@@ -113,10 +133,42 @@ doexec() {
   exec "$@"
 }
 
+domonit() {
+  local instances=${1:-1}
+  shift
+
+  local conffile=$(mktempconf monit)
+  if [[ -f "$HOME/.monitrc" ]]; then
+    cat $HOME/.monitrc > "$conffile"
+  fi  
+  echo "set init" >> "$conffile" 
+  echo "set daemon 30" >> "$conffile"
+  echo "set logfile /dev/stdout" >> "$conffile"
+  if [[ -f "$HOME/.screend.monitrc" ]]; then
+    cat "$HOME/.screend.monitrc" >> "$conffile"
+  fi
+
+  local self=$(readlink -f "$0")
+  local i
+  for i in $(seq 1 $instances); do
+    local ipidfile=$(sed -e ':^/dev/null$:n;s:\([.][^.]*\)$:-'$i'\1:' <<< "$pidfile")
+    local ilogfile=$(sed -e ':^/dev/null$:n;s:\([.][^.]*\)$:-'$i'\1:' <<< "$logfile")
+    echo "check process $name-$i with pidfile $ipidfile" >> "$conffile"
+    echo "start program = \"$self -n $name -i $i -p $ipidfile -l $ilogfile start -- $*\"" >> "$conffile"
+    echo "stop program  = \"$self -n $name -i $i -p $ipidfile -l $ilogfile stop\"" >> "$conffile"
+  done
+  "$self" -n "$name" -p "$pidfile" -l "$logfile" start -- monit -c "$conffile"
+}
+
 
 getscreen() {
   local name=$1
   screen -ls | awk -F '[ \t.]+' '$3 == "'$name'" { print $2 }' || true
+}
+
+mktempconf() {
+  local name=${1:-screend}
+  mktemp --tmpdir "$name.XXXXXX.conf"
 }
 
 
