@@ -124,8 +124,10 @@ dostatus() {
 }
 
 doexec() {
+  command=$1
+  shift
   echo $$ > "$pidfile.tmp"
-  exec "$@"
+  exec "$command" "$@"
 }
 
 domonit() {
