@@ -94,7 +94,7 @@ dostart() {
 
   local conffile=$(mktempconf screen)
   echo logfile $logfile > "$conffile"
-  screen -d -m -S "$name" -c "$conffile" -L -s "$SHELL" "$0" -p "$pidfile" exec -- "$@"
+  screen -d -m -S "$name" -c "$conffile" -L -s -"$SHELL" "$0" -p "$pidfile" exec -- "$@"
   rm "$conffile"
   pid=$(getscreen "$name")
   [[ -n "$pid" ]] # die if no pid
