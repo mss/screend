@@ -1,0 +1,125 @@
+#!/bin/bash
+set -e -o pipefail
+
+name=
+pid=
+pidfile=
+logfile=
+
+
+main() {
+  local instance=
+
+  while getopts n:i:p:l: OPTNAME; do
+    case "$OPTNAME" in
+      h)
+        usage
+        exit 0
+      ;;
+      n)
+        name=$OPTARG
+      ;;
+      i)
+        instance=$OPTARG
+      ;;
+      p)
+        pidfile=$OPTARG
+      ;;
+      l)
+        logfile=$OPTARG
+      ;;
+    esac
+  done
+  shift $(($OPTIND - 1))
+
+  local command=$1
+  shift
+
+  if [[ -z "$name" ]]; then
+    name=screend
+  fi
+  name="$name${instance:+-$instance}"
+
+  if [[ -z "$pidfile" ]]; then
+    pidfile=$PWD
+  fi
+  if [[ -d "$pidfile" ]]; then
+    pidfile="$pidfile/$name.pid"
+  fi
+
+  if [[ -n "$logfile" ]]; then
+    if [[ -d "$logfile" ]]; then
+      logfile="$logfile/$name.log"
+    fi
+  else
+    logfile=/dev/null
+  fi
+
+  pid=$(getscreen "$name")
+
+  case "$command" in
+    start|stop|status|exec)
+      "do$command" "$@"
+      return $?
+    ;;
+    *)
+      return 1
+    ;;
+  esac
+}
+
+
+dostart() {
+  [[ -z "$pid" ]]
+  rm -f "$pidfile"
+
+  local conffile=$(mktemp --tmpdir 'screenrc.XXXXXX.tmp')
+  echo logfile $logfile > "$conffile"
+  screen -d -m -s "$SHELL" -c "$conffile" -L -S "$name" "$0" -p "$pidfile" exec -- "$@"
+  rm "$conffile"
+  pid=$(getscreen "$name")
+  [[ -n "$pid" ]] # die if no pid
+
+  echo $pid > "$pidfile"
+  if ! kill -0 "$pid"; then
+    rm -f "$pidfile" "$pidfile.tmp"
+    return 1
+  fi
+
+  if [[ ! -s "$pidfile.tmp" ]]; then
+    sleep 1
+  fi
+  mv "$pidfile.tmp" "$pidfile"
+
+  return 0
+}
+
+dostop() {
+  [[ -n "$pid" ]] || return 0
+
+  kill $pid
+  return $?
+}
+
+dostatus() {
+  [[ -n "$pid" ]]
+
+  kill -0 $pid
+  return $?
+}
+
+doexec() {
+  echo $$ > "$pidfile.tmp"
+  exec "$@"
+}
+
+
+getscreen() {
+  local name=$1
+  screen -ls | awk -F '[ \t.]+' '$3 == "'$name'" { print $2 }' || true
+}
+
+
+main "$@"
+exit $?
+
