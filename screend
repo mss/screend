@@ -158,6 +158,8 @@ domonit() {
     echo "stop program  = \"$self -n $name -i $i -p $ipidfile -l $ilogfile stop\"" >> "$conffile"
   done
   "$self" -n "$name" -p "$pidfile" -l "$logfile" start -- monit -c "$conffile"
+  sleep 1
+  rm "$conffile"
 }
 
 
