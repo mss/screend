@@ -65,6 +65,11 @@ main() {
 
   pid=$(getscreen "$name")
 
+  if [[ -n "$instances" ]]; then
+    domulti $instances "$command" "$@"
+    return $?
+  fi
+
   case "$command" in
     start|exec)
       doit $command "$@"
@@ -88,12 +93,36 @@ doit() {
   "do$command" "$@"
 }
 
+domulti() {
+  local instances=${1:-1}
+  local command=$2
+  shift 2
+
+  if [[ "$command" == monit ]]; then
+    doit $command $instances "$@"
+    return $?
+  fi
+
+  local self=$(readlink -f "$0")
+  local i
+  local rc=0
+  for i in $(seq 1 $instances); do
+    local ipidfile=$(sed -e ':^/dev/null$:n;s:\([.][^.]*\)$:-'$i'\1:' <<< "$pidfile")
+    local ilogfile=$(sed -e ':^/dev/null$:n;s:\([.][^.]*\)$:-'$i'\1:' <<< "$logfile")
+    "$self" -n "$name" -i "$i" -p "$ipidfile" -l "$ilogfile" "$command" -- "$@" || rc=$?
+    sleep 1
+  done
+  return $rc
+}
+
+
 dostart() {
   [[ -z "$pid" ]]
   rm -f "$pidfile"
 
   local conffile=$(mktempconf screen)
-  echo logfile $logfile > "$conffile"
+  echo logfile $logfile >> "$conffile"
+  echo shelltitle "$name"@$(hostname -f) >> "$conffile"
   screen -d -m -S "$name" -c "$conffile" -L -s -"$SHELL" "$0" -p "$pidfile" exec -- "$@"
   rm "$conffile"
   pid=$(getscreen "$name")
